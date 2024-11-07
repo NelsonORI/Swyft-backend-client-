@@ -1,0 +1,45 @@
+[
+    {
+        "label": "db",
+        "importPath": "config",
+        "description": "config",
+        "isExtraImport": true,
+        "detail": "config",
+        "documentation": {}
+    },
+    {
+        "label": "SerializerMixin",
+        "importPath": "sqlalchemy_serializer",
+        "description": "sqlalchemy_serializer",
+        "isExtraImport": true,
+        "detail": "sqlalchemy_serializer",
+        "documentation": {}
+    },
+    {
+        "label": "Customer",
+        "kind": 6,
+        "importPath": "models",
+        "description": "models",
+        "peekOfCode": "class Customer(db.Models, SerializerMixin):\n    __tablename__ = 'customers'\n    id = db.Column(db.Integer, primary_key=True)\n    name = db.Column(db.String(100), nullable=False)\n    email = db.Column(db.String(100), unique=True, nullable=False)\n    phone_number = db.Column(db.String(20), unique=True, nullable=False)\n    profile_picture = db.Column(db.String(200))\n    password_hash = db.Column(db.String(128), nullable=False)\nclass Order(db.Models, SerializerMixin):\n    __tablename__ = 'orders'",
+        "detail": "models",
+        "documentation": {}
+    },
+    {
+        "label": "Order",
+        "kind": 6,
+        "importPath": "models",
+        "description": "models",
+        "peekOfCode": "class Order(db.Models, SerializerMixin):\n    __tablename__ = 'orders'\n    id = db.Column(db.Integer, primary_key=True)\n    distance = db.Column(db.Float, nullable=False)\n    loader_number = db.Column(db.Integer(20), nullable=False)\n    loader_cost = db.Column(db.Float, nullable=False)\n    price = db.Column(db.Float, nullable=False)\n    from_location = db.Column(db.String(100), nullable=False)\n    to_location = db.Column(db.String(100), nullable=False)\n    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())",
+        "detail": "models",
+        "documentation": {}
+    },
+    {
+        "label": "Vehicle",
+        "kind": 6,
+        "importPath": "models",
+        "description": "models",
+        "peekOfCode": "class Vehicle(db.Models, SerializerMixin):\n    __tablename__ = 'vehicles'\n    id = db.Column(db.Integer, primary_key=True)\n    body_type = db.Column(db.String(50), nullable=False)  # Vehicle body type (e.g., minitruck, pickup, truck)\n    plate_no = db.Column(db.String(20), unique=True)\n    color = db.Column(db.String(50))",
+        "detail": "models",
+        "documentation": {}
+    }
+]
