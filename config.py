@@ -1,0 +1,4 @@
+# config.py
+SQLALCHEMY_DATABASE_URI = "sqlite:///swyft.db"
+SQLALCHEMY_TRACK_MODIFICATIONS = False
+
