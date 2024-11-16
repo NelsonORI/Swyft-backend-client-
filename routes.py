@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from app import swyft_db  # import the db instance
+from app import  db  # import the db instance
 from models import Customer, Driver, Vehicle, Order, Ride  # import models
 
 # Initialize the Blueprint to organize routes
@@ -15,8 +15,8 @@ def create_customer():
         phone_number=data['phone_number'],
         password=data['password']
     )
-    swyft_db.session.add(new_customer)
-    swyft_db.session.commit()
+     db.session.add(new_customer)
+     db.session.commit()
     return jsonify({'message': 'Customer created successfully'}), 201
 
 # Read (Fetch records)
@@ -33,13 +33,13 @@ def update_customer(id):
     customer.full_name = data.get('full_name', customer.full_name)
     customer.email = data.get('email', customer.email)
     customer.phone_number = data.get('phone_number', customer.phone_number)
-    swyft_db.session.commit()
+     db.session.commit()
     return jsonify({'message': 'Customer updated successfully'}), 200
 
 # Delete (Remove a record)
 @api.route('/customers/<int:id>', methods=['DELETE'])
 def delete_customer(id):
     customer = Customer.query.get_or_404(id)
-    swyft_db.session.delete(customer)
-    swyft_db.session.commit()
+     db.session.delete(customer)
+     db.session.commit()
     return jsonify({'message': 'Customer deleted successfully'}), 200
