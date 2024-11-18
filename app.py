@@ -1,4 +1,4 @@
-from config import Flask, request, make_response, app, api, Resource, db, session, os, request, bcrypt
+from config import Flask, request, make_response, app, api, Resource, db, session, os, request, bcrypt, jsonify
 from models import Customer, Driver, Vehicle, Order, Rating, Ride
 
 from flask_jwt_extended import create_access_token
@@ -17,7 +17,7 @@ def user_identity_lookup(user):
 @jwt.user_lookup_loader
 def user_lookup_callback(_jwt_header,jwt_data):
     identity = jwt_data["sub"]
-    return Customer.query.filter_by(id=identity).one_orz-none()
+    return Customer.query.filter_by(id=identity).one_or_none()
 
 class Home(Resource):
     def get(self):
@@ -101,6 +101,80 @@ class Login(Resource):
         return make_response(response, 200)
 
 api.add_resource(Login, '/login')
+
+class OrderResource(Resource):
+    @jwt_required()
+    def get(self):
+        current_user_id = get_jwt_identity()
+        orders = Order.query.filter_by(customer_id = current_user_id).all()
+        if not orders:
+            return make_response({'message':'No orders found'}, 200)
+        response = [order.to_dict() for order in orders]
+        return make_response(response,200)
+
+    @jwt_required()
+    def post(self):
+        data = request.get_json()
+        customer_id = get_jwt_identity()
+        try:
+            new_order = Order(
+                customer_id = customer_id,
+                distance = data.get('distance'),
+                loader_number = data.get('loader_number'),
+                loader_cost = data.get('loader_cost'),
+                from_location = data.get('from_location'),
+                to_location = data.get('to_location'),
+                price = data.get('price')
+            )
+            db.session.add(new_order)
+            db.session.commit()
+            return make_response({'message':'Order made sucessfully'},200)
+        except Exception as e:
+            db.session.rollback()
+            return make_response({'error':str(e)}, 500)
+    
+    @jwt_required()
+    def put(self,order_id):
+        data = request.get_json()
+        order = Order.query.get(order_id)
+        if not order:
+            return make_response({'message':'Order not found'}, 404)
+        try:
+            order.distance = data.get('distance',order.distance)
+            order.loader_number = data.get('loader_number',order.loader_number)
+            order.loader_cost = data.get('loader_cost',order.loader_cost)
+            order.from_location = data.get('from_location',order.from_location)
+            order.to_location = data.get('to_location',order.to_location)
+            order.price = data.get('price',order.price)
+            db.session.commit()
+            return make_response({'message':'Order updated successfully'}, 200)
+        
+        except Exception as e:
+            db.session.rollback()
+            return make_response({'error': str(e)}, 500)
+
+    @jwt_required()
+    def delete(self,order_id):
+        current_user_id = get_jwt_identity()
+        order = Order.query.get(order_id)
+        if not order:
+            return make_response({'error':'Order not found'}, 404)
+
+        if order.customer_id != current_user_id:
+            return make_response({'error':'Unauthorized'},403)
+
+        try:
+            db.session.delete(order)
+            db.session.commit()
+            return make_response({'message':'Order deleted successfully'}, 200)
+
+        except Exception as e:
+            db.session.rollback()
+            return make_response({'error': str(e)}, 500)
+
+
+
+api.add_resource(OrderResource, '/orders', '/orders/<int:order_id>')
 
 
 
