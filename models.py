@@ -27,7 +27,7 @@ class Customer(db.Model, SerializerMixin):
     
     orders = db.relationship('Order', backref='customer', lazy=True)
 
-    serialize_rules = ('-password', '-_password_hash', 'orders')
+    serialize_rules = ('-password', '-_password_hash', '-orders')
 
 
 
