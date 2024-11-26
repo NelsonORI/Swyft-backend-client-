@@ -45,7 +45,7 @@ class Driver(db.Model, SerializerMixin):
     vehicle =  db.relationship('Vehicle', backref='driver', lazy=True, uselist=False)
 
 
-class Vehicle(db.Model, SerializerMixin):
+class Vehicle(db.Model, SerializerMixin): 
     __tablename__ = 'vehicles'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
