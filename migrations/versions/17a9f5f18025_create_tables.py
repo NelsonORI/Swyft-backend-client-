@@ -1,8 +1,8 @@
-"""First migration
+"""Create Tables
 
-Revision ID: 0cc2e8f6858c
-Revises: 
-Create Date: 2024-11-14 16:35:42.093624
+Revision ID: 17a9f5f18025
+Revises: 6e159ef76463
+Create Date: 2024-11-26 23:43:16.721209
 
 """
 from alembic import op
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '0cc2e8f6858c'
-down_revision = None
+revision = '17a9f5f18025'
+down_revision = '6e159ef76463'
 branch_labels = None
 depends_on = None
 
@@ -23,35 +23,44 @@ def upgrade():
     sa.Column('full_name', sa.String(length=100), nullable=False),
     sa.Column('email', sa.String(length=100), nullable=False),
     sa.Column('phone_number', sa.String(length=20), nullable=False),
-    sa.Column('password', sa.String(length=128), nullable=False),
+    sa.Column('_password_hash', sa.String(length=128), nullable=False),
     sa.Column('profile_picture', sa.String(length=200), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('email'),
     sa.UniqueConstraint('phone_number')
     )
     op.create_table('drivers',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
     sa.Column('id_no', sa.String(length=20), nullable=False),
     sa.Column('driving_license_no', sa.String(length=20), nullable=False),
     sa.Column('profile_picture', sa.String(length=200), nullable=True),
+    sa.Column('driver_base', sa.String(length=200), nullable=True),
+    sa.Column('email', sa.String(length=100), nullable=False),
+    sa.Column('phone_number', sa.String(length=20), nullable=False),
+    sa.Column('latitude', sa.Float(), nullable=False),
+    sa.Column('longitude', sa.Float(), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('driving_license_no'),
-    sa.UniqueConstraint('id_no')
+    sa.UniqueConstraint('email'),
+    sa.UniqueConstraint('id_no'),
+    sa.UniqueConstraint('phone_number')
     )
     op.create_table('orders',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('id', sa.String(length=50), nullable=False),
+    sa.Column('vehicle_type', sa.String(length=50), nullable=False),
     sa.Column('distance', sa.Float(), nullable=False),
-    sa.Column('loader_number', sa.Integer(), nullable=False),
+    sa.Column('loaders', sa.Integer(), nullable=False),
     sa.Column('loader_cost', sa.Float(), nullable=False),
-    sa.Column('from_location', sa.String(length=100), nullable=False),
-    sa.Column('to_location', sa.String(length=100), nullable=False),
-    sa.Column('price', sa.Float(), nullable=False),
+    sa.Column('total_cost', sa.Float(), nullable=False),
+    sa.Column('user_lat', sa.Float(), nullable=False),
+    sa.Column('user_lng', sa.Float(), nullable=False),
+    sa.Column('dest_lat', sa.Float(), nullable=False),
+    sa.Column('dest_lng', sa.Float(), nullable=False),
+    sa.Column('time', sa.String(length=100), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('customer_id', sa.Integer(), nullable=True),
     sa.Column('driver_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
     sa.ForeignKeyConstraint(['driver_id'], ['drivers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -64,6 +73,7 @@ def upgrade():
     sa.ForeignKeyConstraint(['customers_id'], ['customers.id'], ),
     sa.ForeignKeyConstraint(['driver_id'], ['drivers.id'], ),
     sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('driver_id'),
     sa.UniqueConstraint('plate_no')
     )
     op.create_table('rides',
