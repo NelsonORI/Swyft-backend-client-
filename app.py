@@ -1,5 +1,8 @@
 from config import Flask, request, make_response, app, api, Resource, db, session, os, bcrypt, jsonify
 from models import Customer, Driver, Vehicle, Order, Rating, Ride
+from utils.geocode import geocode
+from utils.distance import haversine
+    
 
 from flask_jwt_extended import create_access_token
 from flask_jwt_extended import get_jwt_identity, current_user
@@ -43,6 +46,12 @@ class Home(Resource):
 
 api.add_resource(Home, '/')
 
+class Check(Resource):
+    def get(self):
+        content = Driver.query.all()
+        return make_response({'message':"Success"})
+api.add_resource(Check,'/content')
+
 class SignUp(Resource):
     def post(self):
         data = request.get_json()
@@ -79,7 +88,7 @@ class SignUp(Resource):
             response_dict = new_user.to_dict()
 
             response = make_response(
-                response_dict,
+                {'message':'User created successfully'},
                 201,
             )
 
@@ -119,6 +128,84 @@ class Login(Resource):
 
 api.add_resource(Login, '/login')
 
+class DriverSignUp(Resource):
+    def post(self):
+        data = request.get_json()
+
+        id = data.get('id')
+        name = data.get('name')
+        email = data.get('phone')
+        car_type = data.get('carType')
+        password = data.get('password')
+        license_number = data.get('licenseNumber')
+        id_number = data.get('idNumber')
+        license_plate = data.get('licensePlate')
+
+        existing_driver = Driver.query.filter(
+            (Driver.email == email) | (Driver.phone == phone)
+        ).first()
+
+        if existing_driver:
+            if existing_driver.email == email:
+                return make_response({'error':'Email already registered, kindly login'}, 400)
+            if existing_driver.phone == phone:
+                return make_response({'error':'Phone number already registered'}, 400)
+
+        try:
+            new_driver = Driver(
+                id=id,
+                name=name,
+                phone=phone,
+                email=email,
+                car_type=car_type,
+                license_number=license_number,
+                id_number=id_number,
+                license_plate=license_plate
+            )
+
+            new_driver.password_hash = password
+
+            db.session.add(new_driver)
+            db.session.commit()
+
+            return make_response({'message':'Driver created successfully'}, 201)
+
+        except IntegrityError as e:
+            db.session.rollback()
+            return make_response({'error':'An error occured while registering the driver:' + str(e)}, 500)
+        except Exception as e:
+            db.session.rollback()
+            return make_response({'error':'An error occured: ' + str(e)}, 500)
+
+api.add_resource(DriverSignUp,'/driver/signup')
+
+
+class DriverLogin(Resource):
+    def post(self):
+        data = request.get_json()
+        
+        email = data.get('email')
+        password = data.get('password')
+
+        existing_driver = Driver.query.filter(Driver.email == email).first()
+
+        if not existing_driver:
+            return make_response({'error':'Email address not found in our records, create account'}, 400)
+
+        if not bcrypt.check_password_hash(existing_driver._password_hash,password):
+            return make_response({'error':'Incorrect password, please try again'}, 400)
+
+        access_token = create_access_token(identity=existing_driver.id)
+
+        response = {
+            'access_token':access_token,
+            'message':'Login successful'
+        }
+
+        return make_response(response,200)
+
+api.add_resource(DriverLogin,'/driver/login')
+
 class OrderResource(Resource):
     @jwt_required()
     def get(self):
@@ -133,29 +220,75 @@ class OrderResource(Resource):
     def post(self):
         data = request.get_json()
         customer_id = get_jwt_identity()
+
+        vehicle = data.get('vehicle')
+        distance = data.get('distance')
+        loaders = data.get('loaders')
+        loader_cost = data.get('loaderCost')
+        total_cost = data.get('totalCost')
+        user_location = data.get('userLocation')
+        destination = data.get('destination')
+        time = data.get('time')
+
+        if not all([user_location,destination]):
+            return make_response({'error':'Pickup and drop-off locations are required'}, 400)
+
+        from_latitude = user_location.get('lat')
+        from_longitude = user_location.get('lng')
+        to_latitude = destination.get('lat')
+        to_longitude = destination.get('lng')
+
+        if not all([from_latitude, from_longitude, to_latitude, to_longitude]):
+            return make_response({'error': 'Invalid coordinates provided for pickup or destination'}, 400)
+
+        drivers = Driver.query.all()
         try:
+            nearest_driver = None 
+            min_distance = float('inf')
+
+            for driver in drivers:
+                print(from_latitude, from_longitude)
+                driver_distance = haversine(from_latitude,from_longitude,driver.latitude,driver.longitude)
+                if driver_distance < min_distance:
+                    min_distance = driver_distance
+                    nearest_driver = driver
+                print(driver_distance)
+
+            if not nearest_driver:
+                return make_response({'error':'No available drivers nearby'}, 404)
+
+            order_data = {
+                "customer_id":customer_id,
+                "from_location":from_location,
+                "to_location":to_location,
+                "distance":data.get('distance'),
+                "loader_number":data.get('loader_number'),
+                "loader_cost":data.get('loader_cost'),
+                "price":data.get('price'),
+                "driver_id":nearest_driver.id
+            }
+
             new_order = Order(
                 customer_id=customer_id,
+                vehicle_type = data.get('vehicle'),
                 distance=data.get('distance'),
-                loader_number=data.get('loader_number'),
-                loader_cost=data.get('loader_cost'),
+                loaders=data.get('loaders'),
+                loader_cost=data.get('loaderCost'),
+                total_cost=data.get('totalCost'),
                 from_location=data.get('from_location'),
                 to_location=data.get('to_location'),
-                price=data.get('price')
+                user_lat=from_latitude,
+                user_lng=from_longitude,
+                dest_lat=to_latitude,
+                dest_lng=to_longitude,
+                time=data.get('time') ,        
+                driver_id=nearest_driver.id
             )
             db.session.add(new_order)
             db.session.commit()
+            
 
-            # Serialize order data
-            order_data = {
-                "order_id": new_order.id,
-                "customer_id": customer_id,
-                "from_location": new_order.from_location,
-                "to_location": new_order.to_location,
-                "price": new_order.price,
-            }
-
-            # Send order data to Kafka
+                # Send order data to Kafka
             producer.produce(
                 'order-topic',  # Kafka topic
                 key=str(new_order.id),
@@ -164,7 +297,7 @@ class OrderResource(Resource):
             )
             producer.flush()
 
-            return make_response({'message': 'Order made successfully'}, 200)
+            return make_response({'message': 'Order made successfully','nearest_driver':nearest_driver.to_dict()}, 200)
         except Exception as e:
             db.session.rollback()
             return make_response({'error': str(e)}, 500)
@@ -207,6 +340,54 @@ class OrderResource(Resource):
             return make_response({'error': str(e)}, 500)
 
 api.add_resource(OrderResource, '/orders', '/orders/<int:order_id>')
+
+class Driver(Resource):
+    def post(self):
+        data = request.get_json()
+
+        email = data.get('email')
+        phone_number = data.get('phone_number')
+
+        # existing_user = Driver.query.filter(
+        #     (Driver.email == email) | (Driver.phone_number == phone_number)
+        # ).first()
+
+        # if existing_user:
+        #     if existing_user.email == email:
+        #         return make_response({'error':'Email already registered, kindly login'}, 400)
+        #     if existing_user.phone_number == phone_number:
+        #         return make_response({'error':'Phone number already registered'}, 400)
+
+        driver_base = data.get('driver_base')
+        driver_base_coords = geocode(driver_base)
+        
+        if not driver_base_coords:
+            return make_response({'error':'Unable to geocode location provided. Please check the address'}, 400)
+
+        latitude, longitude = driver_base_coords
+        try: 
+            new_driver = Driver(
+                name=data.get('name'),
+                id_number=data.get('id'),
+                driving_license_no=data.get('dl_no'),
+                profile_picture=data.get('profile_picture'),
+                driver_base=data.get('driver_base'),
+                email=data.get('email'),
+                phone_number=data.get('phone_number'),
+                latitude=latitude,
+                longitude=longitude
+            )
+            db.session.add(new_driver)
+            db.session.commit()
+
+            return make_response({'message':'Driver registered successfully'}, 200)
+
+        except Exception as e:
+            db.session.rollback()
+            return make_response({'error':str(e)}, 500)
+
+api.add_resource(Driver,'/driver/signup')
+            
 
 if __name__ == '__main__':
     app.run(debug=True)

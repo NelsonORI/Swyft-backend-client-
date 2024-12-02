@@ -29,21 +29,42 @@ class Customer(db.Model, SerializerMixin):
 
     serialize_rules = ('-password', '-_password_hash', '-orders')
 
+    vehicles = db.relationship('Vehicle', backref='customer', lazy='dynamic')
+
 
 
 class Driver(db.Model, SerializerMixin):
     __tablename__ = 'drivers'
-    
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    name =  db.Column( db.String(100), nullable=False)
-    id_no =  db.Column( db.String(20), unique=True, nullable=False)
-    driving_license_no =  db.Column( db.String(20), unique=True, nullable=False)
-    profile_picture =  db.Column( db.String(200))
-    created_at =  db.Column( db.DateTime, default= db.func.current_timestamp())
-    
-    # Define relationship to Vehicle
-    vehicle =  db.relationship('Vehicle', backref='driver', lazy=True, uselist=False)
 
+    id = db.Column(db.String(100), primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=False)
+    email = db.Column(db.String(100), unique=True, nullable=False)
+    car_type = db.Column(db.String(100), nullable=False)
+
+    _password_hash = db.Column(db.String(128), nullable=False)
+
+    license_number = db.Column(db.String(100), nullable=False)
+    id_number = db.Column(db.String(100), nullable=False)
+
+    license_plate = db.Column(db.String(100), nullable=False)
+
+    @hybrid_property
+    def password_hash(self):
+         """Password hashes should not be viewed directly"""
+         raise Exception('Password hashes may not be viewed.')
+
+    @password_hash.setter
+    def password_hash(self, password):
+        """Hash the password before storing it."""
+        password_hash = bcrypt.generate_password_hash(password.encode("utf-8"))
+        self._password_hash = password_hash.decode("utf-8")
+
+    def authenticate(self, password):
+        """Authenticate the password by comparing the input password with the stored hash."""
+        return bcrypt.check_password_hash(self._password_hash, password.encode("utf-8"))
+
+    serialize_rules = ('-password', '_password_hash')
 
 class Vehicle(db.Model, SerializerMixin): 
     __tablename__ = 'vehicles'
@@ -54,24 +75,30 @@ class Vehicle(db.Model, SerializerMixin):
     
     
     # Foreign key to Driver
-    driver_id =  db.Column( db.Integer,  db.ForeignKey('drivers.id'))
-    customers_id =  db.Column( db.Integer,  db.ForeignKey('customers.id'))
-
-class Order( db.Model, SerializerMixin):
-    __tablename__ = 'orders'
-    
-    id =  db.Column( db.Integer, primary_key=True, autoincrement=True)
-    distance =  db.Column( db.Float, nullable=False)
-    loader_number =  db.Column( db.Integer, nullable=False)
-    loader_cost =  db.Column( db.Float, nullable=False)
-    from_location =  db.Column( db.String(100), nullable=False)
-    to_location =  db.Column( db.String(100), nullable=False)
-    price =  db.Column( db.Float, nullable=False)
-    created_at =  db.Column( db.DateTime, default= db.func.current_timestamp())
-    
-    # Foreign keys to Customer and Driver
+    driver_id =  db.Column( db.String,  db.ForeignKey('drivers.id'))
     customer_id =  db.Column( db.Integer,  db.ForeignKey('customers.id'))
-    driver_id =  db.Column( db.Integer,  db.ForeignKey('drivers.id'))
+
+class Order(db.Model):
+    __tablename__ = 'orders'
+
+    id = db.Column(db.String(50), primary_key=True)  # Match the "id" from frontend
+    vehicle_type = db.Column(db.String(50), nullable=False)
+    distance = db.Column(db.Float, nullable=False)
+    loaders = db.Column(db.Integer, nullable=False, default=0)
+    loader_cost = db.Column(db.Float, nullable=False, default=0.0)
+    total_cost = db.Column(db.Float, nullable=False)
+    user_lat = db.Column(db.Float, nullable=False)  # Latitude for user location
+    user_lng = db.Column(db.Float, nullable=False)  # Longitude for user location
+    dest_lat = db.Column(db.Float, nullable=False)  # Latitude for destination
+    dest_lng = db.Column(db.Float, nullable=False)  # Longitude for destination
+    time = db.Column(db.String(100), nullable=False)  # Store as string or datetime
+    created_at = db.Column(db.DateTime, default=db.func.current_timestamp())  # For tracking
+
+    # Optional: Relationship to Driver if needed
+    driver_id = db.Column(db.String, db.ForeignKey('drivers.id'))
+    customer_id = db.Column(db.Integer, db.ForeignKey('customers.id'))
+    driver = db.relationship('Driver', backref='orders')
+
 
 
 class Rating( db.Model, SerializerMixin):
