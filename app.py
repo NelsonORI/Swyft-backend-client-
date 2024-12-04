@@ -337,22 +337,22 @@ class OrderResource(Resource):
 
 api.add_resource(OrderResource, '/orders', '/orders/<int:order_id>')
 
-class Driver(Resource):
+class Drivers(Resource):
     def post(self):
         data = request.get_json()
 
         email = data.get('email')
         phone_number = data.get('phone_number')
 
-        # existing_user = Driver.query.filter(
-        #     (Driver.email == email) | (Driver.phone_number == phone_number)
-        # ).first()
+        existing_user = Driver.query.filter(
+            (Driver.email == email) | (Driver.phone_number == phone_number)
+        ).first()
 
-        # if existing_user:
-        #     if existing_user.email == email:
-        #         return make_response({'error':'Email already registered, kindly login'}, 400)
-        #     if existing_user.phone_number == phone_number:
-        #         return make_response({'error':'Phone number already registered'}, 400)
+        if existing_user:
+            if existing_user.email == email:
+                return make_response({'error':'Email already registered, kindly login'}, 400)
+            if existing_user.phone_number == phone_number:
+                return make_response({'error':'Phone number already registered'}, 400)
 
         driver_base = data.get('driver_base')
         driver_base_coords = geocode(driver_base)
@@ -382,7 +382,7 @@ class Driver(Resource):
             db.session.rollback()
             return make_response({'error':str(e)}, 500)
 
-api.add_resource(Driver,'/driver/signup')
+api.add_resource(Drivers,'/driver/signup')
             
 
 if __name__ == '__main__':
