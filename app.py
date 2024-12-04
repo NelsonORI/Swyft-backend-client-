@@ -46,38 +46,33 @@ class Home(Resource):
 
 api.add_resource(Home, '/')
 
-class Check(Resource):
-    def get(self):
-        content = Driver.query.all()
-        return make_response({'message':"Success"})
-api.add_resource(Check,'/content')
-
 class SignUp(Resource):
     def post(self):
         data = request.get_json()
-
-        full_name = data.get('full_name')
+        
+        id = data.get('id')
+        full_name = data.get('name')
         email = data.get('email')
-        phone_number = data.get('phone_number')
+        phone_number = data.get('phone')
         password = data.get('password')
-        profile_picture = data.get('profile_picture')
+        
         
         existing_user = Customer.query.filter(
-            (Customer.email == email) | (Customer.phone_number == phone_number)
+            (Customer.email == email) | (Customer.phone == phone_number)
         ).first()
 
         if existing_user:
             if existing_user.email == email:
                 return make_response({'error': 'Email already registered, kindly login'}, 400)
-            if existing_user.phone_number == phone_number:
+            if existing_user.phone == phone_number:
                 return make_response({'error': 'Phone number already registered'}, 400)
 
         try:
             new_user = Customer(
-                full_name=full_name,
+                id=id,
+                name=full_name,
                 email=email,
-                phone_number=phone_number,
-                profile_picture=profile_picture
+                phone=phone_number
             )
 
             new_user.password_hash = password
@@ -134,7 +129,8 @@ class DriverSignUp(Resource):
 
         id = data.get('id')
         name = data.get('name')
-        email = data.get('phone')
+        phone = data.get('phone')
+        email = data.get('email')
         car_type = data.get('carType')
         password = data.get('password')
         license_number = data.get('licenseNumber')
@@ -247,7 +243,7 @@ class OrderResource(Resource):
             min_distance = float('inf')
 
             for driver in drivers:
-                print(from_latitude, from_longitude)
+                #print(from_latitude, from_longitude)
                 driver_distance = haversine(from_latitude,from_longitude,driver.latitude,driver.longitude)
                 if driver_distance < min_distance:
                     min_distance = driver_distance

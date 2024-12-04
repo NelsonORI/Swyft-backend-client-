@@ -6,12 +6,11 @@ from sqlalchemy_serializer import SerializerMixin
 class Customer(db.Model, SerializerMixin):
     __tablename__ = 'customers'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    full_name = db.Column(db.String(100), nullable=False)
+    id = db.Column(db.String(100), primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True, nullable=False)
-    phone_number = db.Column(db.String(20), unique=True, nullable=False)
+    phone = db.Column(db.String(20), unique=True, nullable=False)
     _password_hash = db.Column(db.String(128), nullable=False)
-    profile_picture = db.Column(db.String(200))
     
     @hybrid_property
     def password_hash(self):
@@ -64,7 +63,7 @@ class Driver(db.Model, SerializerMixin):
         """Authenticate the password by comparing the input password with the stored hash."""
         return bcrypt.check_password_hash(self._password_hash, password.encode("utf-8"))
 
-    serialize_rules = ('-password', '_password_hash')
+    serialize_rules = ('-password', '-_password_hash', '-orders')
 
 class Vehicle(db.Model, SerializerMixin): 
     __tablename__ = 'vehicles'
