@@ -1,8 +1,8 @@
 """Initial migration
 
-Revision ID: f7700755a1bb
+Revision ID: 47834c88e5dd
 Revises: 
-Create Date: 2024-12-02 20:37:16.878296
+Create Date: 2024-12-05 22:18:58.654301
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'f7700755a1bb'
+revision = '47834c88e5dd'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -34,6 +34,9 @@ def upgrade():
     sa.Column('phone', sa.String(length=20), nullable=False),
     sa.Column('email', sa.String(length=100), nullable=False),
     sa.Column('car_type', sa.String(length=100), nullable=False),
+    sa.Column('online', sa.Boolean(), nullable=True),
+    sa.Column('latitude', sa.Float(), nullable=False),
+    sa.Column('longitude', sa.Float(), nullable=False),
     sa.Column('_password_hash', sa.String(length=128), nullable=False),
     sa.Column('license_number', sa.String(length=100), nullable=False),
     sa.Column('id_number', sa.String(length=100), nullable=False),
@@ -43,7 +46,7 @@ def upgrade():
     sa.UniqueConstraint('phone')
     )
     op.create_table('orders',
-    sa.Column('id', sa.String(length=50), nullable=False),
+    sa.Column('id', sa.String(length=100), nullable=False),
     sa.Column('vehicle_type', sa.String(length=50), nullable=False),
     sa.Column('distance', sa.Float(), nullable=False),
     sa.Column('loaders', sa.Integer(), nullable=False),
@@ -55,40 +58,40 @@ def upgrade():
     sa.Column('dest_lng', sa.Float(), nullable=False),
     sa.Column('time', sa.String(length=100), nullable=False),
     sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.Column('driver_id', sa.String(), nullable=True),
-    sa.Column('customer_id', sa.Integer(), nullable=True),
+    sa.Column('driver_id', sa.String(length=100), nullable=True),
+    sa.Column('customer_id', sa.String(length=100), nullable=True),
     sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
     sa.ForeignKeyConstraint(['driver_id'], ['drivers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('vehicles',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('id', sa.String(length=100), nullable=False),
     sa.Column('body_type', sa.String(length=50), nullable=False),
     sa.Column('plate_no', sa.String(length=20), nullable=False),
-    sa.Column('driver_id', sa.String(), nullable=True),
-    sa.Column('customer_id', sa.Integer(), nullable=True),
+    sa.Column('driver_id', sa.String(length=100), nullable=True),
+    sa.Column('customer_id', sa.String(length=100), nullable=True),
     sa.ForeignKeyConstraint(['customer_id'], ['customers.id'], ),
     sa.ForeignKeyConstraint(['driver_id'], ['drivers.id'], ),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('plate_no')
     )
     op.create_table('rides',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('id', sa.String(length=100), autoincrement=True, nullable=False),
     sa.Column('distance', sa.Float(), nullable=False),
     sa.Column('created_time', sa.DateTime(), nullable=True),
     sa.Column('loader_cost', sa.Float(), nullable=False),
     sa.Column('from_location', sa.String(length=100), nullable=False),
     sa.Column('to_location', sa.String(length=100), nullable=False),
     sa.Column('price', sa.Float(), nullable=False),
-    sa.Column('order_id', sa.Integer(), nullable=True),
+    sa.Column('order_id', sa.String(length=100), nullable=True),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('ratings',
-    sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+    sa.Column('id', sa.String(length=100), nullable=False),
     sa.Column('rating_score', sa.Integer(), nullable=False),
-    sa.Column('order_id', sa.Integer(), nullable=True),
-    sa.Column('ride_id', sa.Integer(), nullable=True),
+    sa.Column('order_id', sa.String(length=100), nullable=True),
+    sa.Column('ride_id', sa.String(length=100), nullable=True),
     sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ),
     sa.ForeignKeyConstraint(['ride_id'], ['rides.id'], ),
     sa.PrimaryKeyConstraint('id')

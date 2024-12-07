@@ -16,6 +16,7 @@ sqlalchemy = "*"
 bcrypt = "*"
 confluent-kafka = "*"
 geopy = "*"
+pyjwt = "*"
 
 [dev-packages]
 

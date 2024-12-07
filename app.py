@@ -147,6 +147,20 @@ class DriverSignUp(Resource):
             if existing_driver.phone == phone:
                 return make_response({'error':'Phone number already registered'}, 400)
 
+        duplicate_driver = Driver.query.filter(
+            (Driver.id_number == id_number) |
+            (Driver.license_number == license_number) |
+            (Driver.license_plate == license_plate)
+        ).first()
+
+        if duplicate_driver:
+            if duplicate_driver.id_number == id_number:
+                return make_response({'error':'ID number already registered'}, 400)
+            if duplicate_driver.license_number == license_number:
+                return make_response({'error':'License number already registered'}, 400)
+            if duplicate_driver.license_plate == license_plate:
+                return make_response({'error':' Car with this license plate already registered'}, 400)
+
         try:
             new_driver = Driver(
                 id=id,
@@ -237,26 +251,27 @@ class OrderResource(Resource):
         if not all([from_latitude, from_longitude, to_latitude, to_longitude]):
             return make_response({'error': 'Invalid coordinates provided for pickup or destination'}, 400)
 
-        drivers = Driver.query.all()
+        drivers = Driver.query.filter_by(online=True, car_type = vehicle).all()
+        if not drivers:
+            return make_response({'error':'No available driver with the requested vehicle type'}, 404)
+
         try:
             nearest_driver = None 
             min_distance = float('inf')
 
             for driver in drivers:
-                #print(from_latitude, from_longitude)
                 driver_distance = haversine(from_latitude,from_longitude,driver.latitude,driver.longitude)
                 if driver_distance < min_distance:
                     min_distance = driver_distance
                     nearest_driver = driver
-                print(driver_distance)
 
             if not nearest_driver:
                 return make_response({'error':'No available drivers nearby'}, 404)
 
             order_data = {
                 "customer_id":customer_id,
-                "from_location":from_location,
-                "to_location":to_location,
+                "from_location":user_location,
+                "to_location":destination,
                 "distance":data.get('distance'),
                 "loader_number":data.get('loader_number'),
                 "loader_cost":data.get('loader_cost'),
@@ -265,14 +280,13 @@ class OrderResource(Resource):
             }
 
             new_order = Order(
+                id=data.get('id'),
                 customer_id=customer_id,
                 vehicle_type = data.get('vehicle'),
                 distance=data.get('distance'),
                 loaders=data.get('loaders'),
                 loader_cost=data.get('loaderCost'),
                 total_cost=data.get('totalCost'),
-                from_location=data.get('from_location'),
-                to_location=data.get('to_location'),
                 user_lat=from_latitude,
                 user_lng=from_longitude,
                 dest_lat=to_latitude,
@@ -337,6 +351,7 @@ class OrderResource(Resource):
 
 api.add_resource(OrderResource, '/orders', '/orders/<int:order_id>')
 
+
 class Drivers(Resource):
     def post(self):
         data = request.get_json()
@@ -383,6 +398,36 @@ class Drivers(Resource):
             return make_response({'error':str(e)}, 500)
 
 api.add_resource(Drivers,'/driver/signup')
+
+class UpdateDriverLocation(Resource):
+    def put(self, driver_id):
+        data = request.get_json()
+
+        location = data.get('location')
+        if location is None:
+            return make_response({'error': 'Location is required'}, 400)
+
+        latitude = location.get('latitude')
+        longitude = location.get('longitude')
+
+        driver = Driver.query.get(driver_id)
+        if not driver:
+            return make_response({'error': 'Driver not found'}, 404)
+
+        if driver.online:
+            driver.online = False
+        else:
+            driver.online = True
+            driver.latitude = latitude
+            driver.longitude = longitude
+            
+        db.session.commit()
+        return make_response({
+            'message': 'Driver location updated successfully',
+            'online_status':driver.online
+        }, 200)
+
+api.add_resource(UpdateDriverLocation,'/online/<string:driver_id>')
             
 
 if __name__ == '__main__':
