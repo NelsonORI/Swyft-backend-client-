@@ -96,7 +96,12 @@ api.add_resource(JengaPayment, '/jenga/payment')
 
 # Kafka producer configuration
 kafka_config = {
-    'bootstrap.servers': os.environ.get('KAFKA_SERVERS'),  # Replace with your Kafka broker address
+    'bootstrap.servers': os.environ.get('KAFKA_SERVERS'),  # Your Kafka broker
+    'security.protocol': 'SASL_SSL',  # Ensure this matches Confluent Cloud requirements
+    'sasl.mechanisms': 'PLAIN',       # Mechanism used for authentication
+    'sasl.username': os.environ.get('KAFKA_USERNAME'),  # Replace with your API key
+    'sasl.password': os.environ.get('KAFKA_PASSWORD'),  # Replace with your API secret
+    # 'api.version.request': True,     # Ensure the API version is requested
 }
 
 producer = Producer(kafka_config)
