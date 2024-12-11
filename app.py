@@ -96,7 +96,7 @@ api.add_resource(JengaPayment, '/jenga/payment')
 
 # Kafka producer configuration
 kafka_config = {
-    'bootstrap.servers': 'localhost:9092',  # Replace with your Kafka broker address
+    'bootstrap.servers': os.environ.get('KAFKA_SERVERS'),  # Replace with your Kafka broker address
 }
 
 producer = Producer(kafka_config)

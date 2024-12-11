@@ -3,7 +3,7 @@ import json
 
 # Kafka consumer configuration
 consumer_config = {
-    'bootstrap.servers': 'localhost:9092',
+    'bootstrap.servers': os.environ.get('KAFKA_SERVERS'),
     'group.id': 'driver-assignment-group',
     'auto.offset.reset': 'earliest',
 }
