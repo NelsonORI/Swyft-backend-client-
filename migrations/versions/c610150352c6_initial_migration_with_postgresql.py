@@ -1,8 +1,8 @@
-"""Initial migration
+"""Initial migration with PostgreSQL
 
-Revision ID: 47834c88e5dd
+Revision ID: c610150352c6
 Revises: 
-Create Date: 2024-12-05 22:18:58.654301
+Create Date: 2024-12-07 18:21:21.008593
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '47834c88e5dd'
+revision = 'c610150352c6'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -76,7 +76,7 @@ def upgrade():
     sa.UniqueConstraint('plate_no')
     )
     op.create_table('rides',
-    sa.Column('id', sa.String(length=100), autoincrement=True, nullable=False),
+    sa.Column('id', sa.String(length=100), nullable=False),
     sa.Column('distance', sa.Float(), nullable=False),
     sa.Column('created_time', sa.DateTime(), nullable=True),
     sa.Column('loader_cost', sa.Float(), nullable=False),

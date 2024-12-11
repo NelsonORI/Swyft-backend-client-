@@ -1,13 +1,15 @@
+import requests
 from config import Flask, request, make_response, app, api, Resource, db, session, os, bcrypt, jsonify
 from models import Customer, Driver, Vehicle, Order, Rating, Ride
 from utils.geocode import geocode
 from utils.distance import haversine
     
 
-from flask_jwt_extended import create_access_token
+from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_jwt_extended import get_jwt_identity, current_user
 from flask_jwt_extended import jwt_required
 from flask_jwt_extended import JWTManager
+from datetime import timedelta
 
 from confluent_kafka import Producer
 import json
@@ -15,7 +17,82 @@ import json
 # Flask app configurations
 app.config["JWT_SECRET_KEY"] = os.environ.get('JWT_KEY')
 app.config["JWT_TOKEN_LOCATION"] = ['headers']
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(minutes=30)
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=7)
 jwt = JWTManager(app)
+
+# Flask app configurations for Jenga API
+app.config["JENGA_CONSUMER_KEY"] = "CONSUMER_KEY"
+app.config["JENGA_CONSUMER_SECRET"] = "CONSUMER_SECRET"
+app.config["JENGA_ENV"] = "sandbox"  # Change to 'production' when live
+app.config["JENGA_BASE_URL"] = "https://uat.finserve.africa/v3-apis/payment-api/v3.0/stkussdpush/initiate"  # Update this for production
+
+def get_jenga_access_token():
+    consumer_key = app.config['JENGA_CONSUMER_KEY']
+    consumer_secret = app.config['JENGA_CONSUMER_SECRET']
+    auth_url = f"{app.config['JENGA_BASE_URL']}/identity/v2/token"
+    
+    headers = {
+        "Authorization": f"Basic {consumer_key}:{consumer_secret}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    payload = {"grant_type": "client_credentials"}
+    
+    response = requests.post(auth_url, data=payload, headers=headers)
+    if response.status_code == 200:
+        return response.json().get('access_token')
+    print(response.status_code, response.text)
+    raise Exception('Failed to get Jenga access token')
+
+class JengaPayment(Resource):
+    def post(self):
+        data = request.get_json()
+        phone = data.get('phoneNumber')
+        amount = data.get('amount')
+        driver_id = data.get('driver_id')
+        timestamp = data.get('timestamp')
+        
+        try:
+            access_token = get_jenga_access_token()
+            api_url = f"{app.config['JENGA_BASE_URL']}/transaction/v2/remittance"
+            headers = {
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json"
+            }
+
+            payload = {
+                "source": {
+                    "countryCode": "KE",
+                    "name": "Your Business Name",
+                    "accountNumber": "Source Account Number"
+                },
+                "destination": {
+                    "type": "mobile",
+                    "countryCode": "KE",
+                    "name": "Recipient Name",
+                    "mobileNumber": phone
+                },
+                "transfer": {
+                    "type": "MobileWallet",
+                    "amount": str(amount),
+                    "currencyCode": "KES",
+                    "reference": "PaymentReference",
+                    "date": timestamp
+                }
+            }
+
+            response = requests.post(api_url, json=payload, headers=headers)
+            if response.status_code == 200:
+                return {'message': 'Payment initiated successfully'}, 200
+            return {'error': response.json()}, response.status_code
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+# Add the new payment resource
+api.add_resource(JengaPayment, '/jenga/payment')
+
+
+    
 
 # Kafka producer configuration
 kafka_config = {
@@ -113,15 +190,32 @@ class Login(Resource):
             return make_response({'error': 'Incorrect password, please try again'}, 400)
 
         access_token = create_access_token(identity=existing_user.id)
+        refresh_token = create_refresh_token(identity=existing_user.id)
 
         response = {
             'access_token': access_token,
+            'refresh_token': refresh_token,
             'message': 'Login successful'
         }
 
         return make_response(response, 200)
 
 api.add_resource(Login, '/login')
+
+class TokenRefresh(Resource):
+    @jwt_required(refresh=True)
+    def post(self):
+        current_user = get_jwt_identity()
+        new_access_token = create_access_token(identity=current_user)
+
+        response = {
+            'access_token': new_access_token,
+           'message': 'Token refreshed successfully'
+        }
+
+        return make_response(response, 200)
+
+api.add_resource(TokenRefresh, '/refresh')
 
 class DriverSignUp(Resource):
     def post(self):
@@ -155,11 +249,11 @@ class DriverSignUp(Resource):
 
         if duplicate_driver:
             if duplicate_driver.id_number == id_number:
-                return make_response({'error':'ID number already registered'}, 400)
+                return make_response({'error':'Driver already registered'}, 400)
             if duplicate_driver.license_number == license_number:
-                return make_response({'error':'License number already registered'}, 400)
+                return make_response({'error':'Driver already registered'}, 400)
             if duplicate_driver.license_plate == license_plate:
-                return make_response({'error':' Car with this license plate already registered'}, 400)
+                return make_response({'error':'Driver already registered'}, 400)
 
         try:
             new_driver = Driver(
@@ -206,9 +300,12 @@ class DriverLogin(Resource):
             return make_response({'error':'Incorrect password, please try again'}, 400)
 
         access_token = create_access_token(identity=existing_driver.id)
+        refresh_token = create_refresh_token(identity=existing_driver.id)
+
 
         response = {
             'access_token':access_token,
+            'refresh_token':refresh_token,
             'message':'Login successful'
         }
 
@@ -276,7 +373,8 @@ class OrderResource(Resource):
                 "loader_number":data.get('loader_number'),
                 "loader_cost":data.get('loader_cost'),
                 "price":data.get('price'),
-                "driver_id":nearest_driver.id
+                "driver_id":nearest_driver.id,
+                "vehicle_type": data.get('vehicle'),
             }
 
             new_order = Order(
@@ -314,22 +412,88 @@ class OrderResource(Resource):
 
     @jwt_required()
     def put(self, order_id):
+        current_user_id = get_jwt_identity()
         data = request.get_json()
+
         order = Order.query.get(order_id)
         if not order:
             return make_response({'message': 'Order not found'}, 404)
+
+        if order.customer_id != current_user_id:
+            return make_response({'error': 'Unauthorized to update this order'}, 403)
+
         try:
-            order.distance = data.get('distance', order.distance)
-            order.loader_number = data.get('loader_number', order.loader_number)
-            order.loader_cost = data.get('loader_cost', order.loader_cost)
-            order.from_location = data.get('from_location', order.from_location)
-            order.to_location = data.get('to_location', order.to_location)
-            order.price = data.get('price', order.price)
-            db.session.commit()
-            return make_response({'message': 'Order updated successfully'}, 200)
+            new_user_location = data.get('userLocation', {})
+            new_destination = data.get('destination', {})
+
+            if new_user_location or new_destination:
+                from_latitude = new_user_location.get('lat',order.user_lat)
+                from_longitude = new_user_location.get('lng', order.user_lng)
+                to_latitude = new_destination.get('lat', order.dest_lat)
+                to_longitude = new_destination.get('lng', order.dest_lng)
+
+                if not all([from_latitude, from_longitude, to_latitude, to_longitude]):
+                    return make_response({'error': 'Invalid coordinates provided for pickup or destination'}, 400)
+
+                order.user_lat = from_latitude
+                order.user_lng = from_longitude
+                order.dest_lat = to_latitude
+                order.dest_lng = to_longitude
+
+                new_vehicle = data.get('vehicle', order.vehicle_type)
+                if new_vehicle!= order.vehicle_type:
+                    drivers = Driver.query.filter_by(online=True, car_type=new_vehicle).all()
+                    if not drivers:
+                        return make_response({'error':'No available driver with the requested vehicle type'}, 404)
+
+                    nearest_driver = None
+                    min_distance = float('inf')
+                    for driver in drivers:
+                        driver_distance = haversine(order.user_lat, order.user_lng, driver.latitude, driver.longitude)
+                        if driver_distance < min_distance:
+                            min_distance = driver_distance
+                            nearest_driver = driver
+
+                    if not nearest_driver:
+                        return make_response({'error':'No available drivers nearby'}, 404)
+
+                    order.driver_id = nearest_driver.id
+                    order.vehicle_type = new_vehicle
+                
+                order.distance = data.get('distance', order.distance)
+                order.loaders = data.get('loaders', order.loaders)
+                order.loader_cost = data.get('loaderCost', order.loader_cost)
+                order.total_cost = data.get('totalCost', order.total_cost)
+                order.time = data.get('time', order.time)
+
+                db.session.commit()
+
+                updated_order_data = {
+                    "customer_id": order.customer_id,
+                    "from_location": {"lat": order.user_lat, "lng": order.user_lng},
+                    "to_location": {"lat": order.dest_lat, "lng": order.dest_lng},
+                    "distance": order.distance,
+                    "loaders": order.loaders,
+                    "loader_cost": order.loader_cost,
+                    "price": order.total_cost,
+                    "driver_id": order.driver_id,
+                    "vehicle_type": order.vehicle_type
+                }
+
+                producer.produce(
+                    'order-topic',
+                    key=str(order.id),
+                    value=json.dumps(updated_order_data),
+                    callback=delivery_report
+                )
+                producer.flush()
+
+                return make_response({'message': 'Order updated successfully','order': order.to_dict()}, 200)
+
         except Exception as e:
             db.session.rollback()
             return make_response({'error': str(e)}, 500)
+            
 
     @jwt_required()
     def delete(self, order_id):
@@ -339,7 +503,7 @@ class OrderResource(Resource):
             return make_response({'error': 'Order not found'}, 404)
 
         if order.customer_id != current_user_id:
-            return make_response({'error': 'Unauthorized'}, 403)
+            return make_response({'error': 'Unauthorized to delete this order'}, 403)
 
         try:
             db.session.delete(order)
@@ -349,7 +513,7 @@ class OrderResource(Resource):
             db.session.rollback()
             return make_response({'error': str(e)}, 500)
 
-api.add_resource(OrderResource, '/orders', '/orders/<int:order_id>')
+api.add_resource(OrderResource, '/orders', '/orders/<string:order_id>')
 
 
 class Drivers(Resource):
@@ -416,14 +580,16 @@ class UpdateDriverLocation(Resource):
 
         if driver.online:
             driver.online = False
+            message = "You are now offline"
         else:
             driver.online = True
             driver.latitude = latitude
             driver.longitude = longitude
+            message = "You are now online"
             
         db.session.commit()
         return make_response({
-            'message': 'Driver location updated successfully',
+            'message': message,
             'online_status':driver.online
         }, 200)
 

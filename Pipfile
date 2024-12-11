@@ -17,6 +17,7 @@ bcrypt = "*"
 confluent-kafka = "*"
 geopy = "*"
 pyjwt = "*"
+requests = "*"
 
 [dev-packages]
 
