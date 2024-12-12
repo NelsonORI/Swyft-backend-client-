@@ -26,4 +26,3 @@ requests>=2.0.0
 geopy>=2.3.0
 flask-jwt-extended>=4.4.0
 confluent-kafka==2.3.0
-flask-cors==3.0.10
