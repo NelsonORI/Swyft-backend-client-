@@ -7,7 +7,6 @@ name = "pypi"
 flask-bcrypt = "*"
 flask-sqlalchemy = "*"
 flask-migrate = "*"
-flask-cors = "*"
 flask-restful = "*"
 flask = "*"
 sqlalchemy-serializer = "*"
@@ -16,6 +15,9 @@ sqlalchemy = "*"
 bcrypt = "*"
 confluent-kafka = "*"
 geopy = "*"
+pyjwt = "*"
+requests = "*"
+flask-cors = "*"
 
 [dev-packages]
 
