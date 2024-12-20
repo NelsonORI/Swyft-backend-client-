@@ -168,6 +168,7 @@ class SignUp(Resource):
             )
 
             new_user.password_hash = password
+            
 
             db.session.add(new_user)
             db.session.commit()
