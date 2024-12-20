@@ -27,6 +27,16 @@ app.config["JENGA_CONSUMER_SECRET"] = "CONSUMER_SECRET"
 app.config["JENGA_ENV"] = "sandbox"  # Change to 'production' when live
 app.config["JENGA_BASE_URL"] = "https://uat.finserve.africa/v3-apis/payment-api/v3.0/stkussdpush/initiate"  # Update this for production
 
+@jwt.user_identity_loader
+def user_identity_lookup(user):
+    return {"id": user} 
+
+@jwt.user_lookup_loader
+def user_lookup_callback(_jwt_header, jwt_data):
+    identity = jwt_data["sub"]
+    user_id = identity["id"]
+    return Customer.query.filter_by(id=user_id).one_or_none()
+    
 def get_jenga_access_token():
     consumer_key = app.config['JENGA_CONSUMER_KEY']
     consumer_secret = app.config['JENGA_CONSUMER_SECRET']
@@ -165,7 +175,10 @@ class SignUp(Resource):
             response_dict = new_user.to_dict()
 
             response = make_response(
-                {'message':'User created successfully'},
+                {
+                    'message':'User created successfully',
+                    'user':response_dict,
+                    },
                 201,
             )
 
@@ -199,6 +212,7 @@ class Login(Resource):
 
         response = {
             'access_token': access_token,
+            'user':existing_user.to_dict(),
             'refresh_token': refresh_token,
             'message': 'Login successful'
         }
@@ -206,6 +220,13 @@ class Login(Resource):
         return make_response(response, 200)
 
 api.add_resource(Login, '/login')
+
+class CheckSession(Resource):
+    @jwt_required()
+    def get(self):
+        return make_response(current_user.to_dict(), 200)
+
+api.add_resource(CheckSession, '/check_session', endpoint="check_session")
 
 class TokenRefresh(Resource):
     @jwt_required(refresh=True)
