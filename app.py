@@ -1,8 +1,10 @@
+import base64
 import requests
 from config import Flask, request, make_response, app, api, Resource, db, session, os, bcrypt, jsonify
 from models import Customer, Driver, Vehicle, Order, Rating, Ride
 from utils.geocode import geocode
 from utils.distance import haversine
+from datetime import datetime
     
 
 from flask_jwt_extended import create_access_token, create_refresh_token
@@ -37,70 +39,135 @@ def user_lookup_callback(_jwt_header, jwt_data):
     user_id = identity["id"]
     return Customer.query.filter_by(id=user_id).one_or_none()
     
-def get_jenga_access_token():
-    consumer_key = app.config['JENGA_CONSUMER_KEY']
-    consumer_secret = app.config['JENGA_CONSUMER_SECRET']
-    auth_url = f"{app.config['JENGA_BASE_URL']}/identity/v2/token"
+
+passkey = os.environ.get('MPESA_PASSKEY')
+
+def generate_mpesa_token():
+    consumer_key = os.environ.get('MPESA_CONSUMER_KEY')
+    consumer_secret = os.environ.get('MPESA_CONSUMER_SECRET')
+    
+    # Combine consumer key and secret into a Base64-encoded string
+    credentials = f"{consumer_key}:{consumer_secret}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+    # Define the Mpesa OAuth URL
+    mpesa_auth_url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
     
     headers = {
-        "Authorization": f"Basic {consumer_key}:{consumer_secret}",
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Authorization": f"Basic {encoded_credentials}",
+        "Content-Type":"application/json"
     }
-    payload = {"grant_type": "client_credentials"}
-    
-    response = requests.post(auth_url, data=payload, headers=headers)
-    if response.status_code == 200:
-        return response.json().get('access_token')
-    print(response.status_code, response.text)
-    raise Exception('Failed to get Jenga access token')
 
-class JengaPayment(Resource):
+    # Request the token
+    response = requests.get(mpesa_auth_url, headers=headers)
+    if response.status_code == 200:
+        return response.json().get("access_token")
+    else:
+        response.raise_for_status()
+
+def generate_password(shortcode,passkey,timestamp):
+    raw_string = f"{shortcode}{passkey}{timestamp}"
+    return base64.b64encode(raw_string.encode()).decode()
+
+def generate_timestamp():
+    return datetime.now().strftime('%Y%m%d%H%M%S')
+
+class MpesaPayment(Resource):
     def post(self):
         data = request.get_json()
-        phone = data.get('phoneNumber')
-        amount = data.get('amount')
-        driver_id = data.get('driver_id')
-        timestamp = data.get('timestamp')
-        
         try:
-            access_token = get_jenga_access_token()
-            api_url = f"{app.config['JENGA_BASE_URL']}/transaction/v2/remittance"
+            required_fields = ['Amount', 'PartyA', 'PartyB', 'PhoneNumber', 'CallBackURL', 'AccountReference', 'TransactionDesc']
+            for field in required_fields:
+                if field not in data:
+                    return make_response({'error':f'Missing required field: {field}'}, 400)
+
+            # Define business short code and generate timestamp
+            business_short_code = 174379
+            timestamp = generate_timestamp()  # Generate timestamp BEFORE using it
+            password = generate_password(business_short_code, passkey, timestamp)
+            transaction_type = "CustomerPayBillOnline"
+
+
+            # Extract other fields
+            amount = data.get('Amount')
+            party_a = "600981"
+            party_b = "174379"
+            phone_number = "254708374149"
+            call_back_url = os.environ.get('MPESA_CALLBACK')
+            account_reference = "CompanyXLTD"
+            transaction_desc = "Payment of X"
+
+            # Generate Mpesa token
+            token = generate_mpesa_token()
+
+            # Create request payload
+            request_payload = {
+                "BusinessShortCode": business_short_code,
+                "Password":  password,
+                "Timestamp": timestamp,
+                "TransactionType": transaction_type,
+                "Amount": amount,
+                "PartyA": party_a,
+                "PartyB": party_b,
+                "PhoneNumber": phone_number,
+                "CallBackURL": call_back_url,
+                "AccountReference": account_reference,
+                "TransactionDesc": transaction_desc
+            }
+
             headers = {
-                "Authorization": f"Bearer {access_token}",
+                "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json"
             }
+            
+            # Send API request
+            response = requests.post(
+                "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest",
+                headers=headers, 
+                json=request_payload
+            )
 
-            payload = {
-                "source": {
-                    "countryCode": "KE",
-                    "name": "Your Business Name",
-                    "accountNumber": "Source Account Number"
-                },
-                "destination": {
-                    "type": "mobile",
-                    "countryCode": "KE",
-                    "name": "Recipient Name",
-                    "mobileNumber": phone
-                },
-                "transfer": {
-                    "type": "MobileWallet",
-                    "amount": str(amount),
-                    "currencyCode": "KES",
-                    "reference": "PaymentReference",
-                    "date": timestamp
-                }
-            }
-
-            response = requests.post(api_url, json=payload, headers=headers)
             if response.status_code == 200:
-                return {'message': 'Payment initiated successfully'}, 200
-            return {'error': response.json()}, response.status_code
+                return make_response({"message": "Payment initiated successfully", "data": response.json()}, 200)
+            else:
+                return make_response({"error": "Payment initiation failed", "details": response.json()}, 400)
+
+        except requests.exceptions.RequestException as e:
+            return make_response({"error": "Request failed", "details": str(e)}, 500)
         except Exception as e:
-            return {'error': str(e)}, 500
+            return make_response({"error": "An error occurred", "details": str(e)}, 500)
 
-# Add the new payment resource
-api.add_resource(JengaPayment, '/jenga/payment')
 
+api.add_resource(MpesaPayment,'/process-payment')
+
+class ReceiveCallback(Resource):
+    #This endpoint receives the callback from mpesa after payment.
+    def post(self):
+        callback_data = request.get_json()
+        try:
+            if not callback_data:
+                return make_response({'error':'No callback data received'}, 400)
+
+            result_code = callback_data.get('Body', {}).get('stkCallback',{}).get('ResultCode')
+            result_desc = callback_data.get('Body', {}).get('stkCallback',{}).get('ResultDesc')
+            merchant_request_id = callback_data.get("Body", {}).get("stkCallback", {}).get("MerchantRequestID")
+            checkout_request_id = callback_data.get("Body", {}).get("stkCallback", {}).get("CheckoutRequestID")
+            callback_metadata = callback_data.get("Body", {}).get("stkCallback", {}).get("CallbackMetadata", {}).get("Item", [])
+
+            metadata_dict = {item.get("Name"): item.get("Value") for item in callback_metadata}
+            amount = metadata_dict.get("Amount")
+            mpesa_receipt_number = metadata_dict.get("MpesaReceiptNumber")
+            balance = metadata_dict.get("Balance")
+            transaction_date = metadata_dict.get("TransactionDate")
+            phone_number = metadata_dict.get("PhoneNumber")
+
+            return make_response({"message": "Callback received successfully"}, 200)
+
+        except Exception as e:
+            # Return an error response
+            return make_response({"error": "An error occurred while processing the callback", "details": str(e)}, 500)
+
+api.add_resource(ReceiveCallback,'/payment-callback')
 
     
 
