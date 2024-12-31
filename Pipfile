@@ -16,8 +16,8 @@ bcrypt = "*"
 confluent-kafka = "*"
 geopy = "*"
 pyjwt = "*"
-requests = "*"
 flask-cors = "*"
+requests = "*"
 
 [dev-packages]
 
